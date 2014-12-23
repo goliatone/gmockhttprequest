@@ -480,14 +480,30 @@
          * If it's an nsIInputStream, it must be compatible with
          * nsIUploadChannel's setUploadStream()method. In that case,
          * a Content-Length header is added to the request, with its
-         * value obtained using nsIInputStream's available() method. Any headers included at the top of the stream are treated as part of the message body. The stream's MIMEtype should be specified by setting the Content-Type header using the setRequestHeader() method prior to calling send().
-         * The best way to send binary content (like in files upload) is using an ArrayBufferView or Blobs in conjuncton with the send() method. However, if you want to send a stringifiable raw data, use the sendAsBinary() method instead, or the StringView Non native typed arrays superclass.
+         * value obtained using nsIInputStream's available() method.
+         *
+         * Any headers included at the top of the stream are treated
+         * as part of the message body. The stream's MIMEtype should be
+         * specified by setting the Content-Type header using the
+         * setRequestHeader() method prior to calling send().
+         *
+         * The best way to send binary content (like in files upload)
+         * is using an ArrayBufferView or Blobs in conjunction with the
+         * send() method. However, if you want to send a stringifiable
+         * raw data, use the sendAsBinary() method instead, or the
+         * StringView Non native typed arrays superclass.
          */
          if(this.readyState !== GMockHttpRequest.OPENED || this.sent){
             throw new Error('Failed to execute \'send\' on \'XMLHttpRequest\': The object\'s state must be OPENED');
          }
 
-         if((/^(GET|HEAD)$/i).test(this.method)) data = null;
+        if((/^(GET|HEAD)$/i).test(this.method)){
+            data = null;
+        } else {
+            var headers = this.getRequestHeader('Content-Type') || 'text/plain;charset=utf-8';
+            headers = (headers.split(';')[0]) + ';charset=utf-8';
+            this.setRequestHeader('Content-Type', headers);
+        }
 
          this.sent = true;
          this.error = false;
@@ -517,6 +533,12 @@
         this.onabort();
     };
 
+    GMockHttpRequest.prototype.setResponseHeaders = function(headers){
+        Object.kesy(headers || {}).map(function(header){
+            this.setResponseHeader(header, headers[header]);
+        }, this);
+    };
+
     GMockHttpRequest.prototype.setResponseHeader = function(header, value){
         if(! header) return;
         this.responseHeaders[header.toLowerCase()] = value;
@@ -533,8 +555,7 @@
      */
     GMockHttpRequest.prototype.getResponseHeader = function(header){
         if(this.readyState <= GMockHttpRequest.OPENED || this.error) return null;
-        if(!this.responseHeaders.hasOwnProperty(header)) return null;
-        return this.responseHeaders[(header || '').toLowerCase()];
+        return this.responseHeaders[(header || '').toLowerCase()] || null;
     };
 
     /**
@@ -548,14 +569,16 @@
      * @return {String}
      */
     GMockHttpRequest.prototype.getAllResponseHeaders = function(){
-        var out = '';
+        if(this.readyState < GMockHttpRequest.HEADERS_RECEIVED) return '';
+
+        var headers = '';
 
         Object.keys(this.responseHeaders).forEach(function(header){
             if(this.ignoredResponseHeaders.indexOf(header) !== -1) return;
-            out += header + ': ' + this.responseHeaders[header] + '\r\n';
+            headers += header + ': ' + this.responseHeaders[header] + '\r\n';
         }, this);
 
-        return out;
+        return headers;
     };
 
     GMockHttpRequest.prototype.makeXMLResponse = function(data){
@@ -573,7 +596,7 @@
         return xmlDoc;
     };
 
-    GMockHttpRequest.prototype.fakeResponse = function(status, data){
+    GMockHttpRequest.prototype.fakeResponse = function(status, headers, body){
         if( this.readyState !== GMockHttpRequest.OPENED || ! this.sent){
             throw new Error('Invalid state');
         }
@@ -581,13 +604,17 @@
         this.status = status;
         this.statusText = status + ' ' + GMockHttpRequest.STATUS_CODES[status];
 
+        //set response headers
+        this.setResponseHeaders(headers);
         this.readyState = GMockHttpRequest.HEADERS_RECEIVED;
+
 
         this.onprogress();
         this.onreadystatechange();
 
-        this.responseText = data;
-        this.responseXML = this.makeXMLResponse(data);
+        //set response body
+        this.responseText = body;
+        this.responseXML = this.makeXMLResponse(body);
 
         this.readyState = GMockHttpRequest.LOADING;
         this.onprogress();
