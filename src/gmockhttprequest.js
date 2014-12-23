@@ -69,24 +69,24 @@
 
 
     var _unsafeHeaders = {
-        'accept-charset',
-        'accept-encoding',
-        'connection',
-        'content-length',
-        'cookie',
-        'cookie2',
-        'content-transfer-encoding',
-        'date',
-        'expect',
-        'host',
-        'keep-alive',
-        'referer',
-        'te',
-        'trailer',
-        'transfer-encoding',
-        'upgrade',
-        'user-agent',
-        'via'
+        'accept-charset': true,
+        'accept-encoding': true,
+        'connection': true,
+        'content-length': true,
+        'cookie': true,
+        'cookie2': true,
+        'content-transfer-encoding': true,
+        'date': true,
+        'expect': true,
+        'host': true,
+        'keep-alive': true,
+        'referer': true,
+        'te': true,
+        'trailer': true,
+        'transfer-encoding': true,
+        'upgrade': true,
+        'user-agent': true,
+        'via': true
     };
 
     function _startsWith(target /*, ...rest*/){
