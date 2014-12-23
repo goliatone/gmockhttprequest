@@ -68,7 +68,7 @@
     };
 
 
-    var _nullHeaders = {
+    var _unsafeHeaders = {
         'accept-charset',
         'accept-encoding',
         'connection',
@@ -116,6 +116,10 @@
 
 	var OPTIONS = {
         autoinitialize: true,
+        /*
+         * List of ignored headers in `getAllResponseHeaders`
+         */
+        ignoredResponseHeaders: ['set-cookie', 'set-cookie2'],
         /*
          * More recent browsers, including Firefox,
          * also support listening to the XMLHttpRequest
@@ -199,6 +203,55 @@
      * @type {Number}
      */
     GMockHttpRequest.DONE = 4;
+
+    GMockHttpRequest.STATUS_CODES = {
+        100: 'Continue',
+        101: 'Switching Protocols',
+        102: 'Processing',
+        200: 'OK',
+        201: 'Created',
+        202: 'Accepted',
+        203: 'Non-Authoritative Information',
+        204: 'No Content',
+        205: 'Reset Content',
+        206: 'Partial Content',
+        207: 'Multi-Status',
+        300: 'Multiple Choices',
+        301: 'Moved Permanently',
+        302: 'Moved Temporarily',
+        303: 'See Other',
+        304: 'Not Modified',
+        305: 'Use Proxy',
+        307: 'Temporary Redirect',
+        400: 'Bad Request',
+        401: 'Unauthorized',
+        402: 'Payment Required',
+        403: 'Forbidden',
+        404: 'Not Found',
+        405: 'Method Not Allowed',
+        406: 'Not Acceptable',
+        407: 'Proxy Authentication Required',
+        408: 'Request Time-out',
+        409: 'Conflict',
+        410: 'Gone',
+        411: 'Length Required',
+        412: 'Precondition Failed',
+        413: 'Request Entity Too Large',
+        414: 'Request-URI Too Large',
+        415: 'Unsupported Media Type',
+        416: 'Requested range not satisfiable',
+        417: 'Expectation Failed',
+        422: 'Unprocessable Entity',
+        423: 'Locked',
+        424: 'Failed Dependency',
+        500: 'Internal Server Error',
+        501: 'Not Implemented',
+        502: 'Bad Gateway',
+        503: 'Service Unavailable',
+        504: 'Gateway Time-out',
+        505: 'HTTP Version not supported',
+        507: 'Insufficient Storage'
+    };
 
     /**
      * Make default options available so we
@@ -305,10 +358,12 @@
 
         this.sent = false;
         this.error = false;
-        this.readyState = 0;
+
         this.requestText = null;
         this.requestHeaders = {};
         this.responseHeaders = {};
+
+        this.readyState = GMockHttpRequest.UNSENT;
     };
 
     /**
@@ -392,10 +447,9 @@
     GMockHttpRequest.prototype.setRequestHeader = function(header, value){
         // TypeError if not valid arguments, both required
         header = header.toLowerCase();
-        if(_nullHeaders.hasOwnProperty(header)) return;
+        if(_unsafeHeaders.hasOwnProperty(header)) return;
         if(_startsWith(header, 'proxy-', 'sec-')) return;
 
-        //TODO: Should we consider array and join here?
         var prev = this.requestHeaders[header];
         if(prev) value = prev + ', ' + value;
 
@@ -434,7 +488,7 @@
             throw new Error('Failed to execute \'send\' on \'XMLHttpRequest\': The object\'s state must be OPENED');
          }
 
-         if((/GET|HEAD/i).test(this.method)) data = null;
+         if((/^(GET|HEAD)$/i).test(this.method)) data = null;
 
          this.sent = true;
          this.error = false;
@@ -465,7 +519,8 @@
     };
 
     GMockHttpRequest.prototype.setResponseHeader = function(header, value){
-
+        if(! header) return;
+        this.responseHeaders[header.toLowerCase()] = value;
     };
 
     /**
@@ -478,31 +533,89 @@
      * @return {String}
      */
     GMockHttpRequest.prototype.getResponseHeader = function(header){
-
+        if(this.readyState <= GMockHttpRequest.OPENED || this.error) return null;
+        if(!this.responseHeaders.hasOwnProperty(header)) return null;
+        return this.responseHeaders[(header || '').toLowerCase()];
     };
 
     /**
      * Returns all the response headers as a string,
      * or null if no response has been received.
+     *
      * Note: For multipart requests, this returns the
      * headers from the current part of the request,
      * not from the original channel.
+     *
      * @return {String}
      */
     GMockHttpRequest.prototype.getAllResponseHeaders = function(){
+        var out = '';
 
+        Object.keys(this.responseHeaders).forEach(function(header){
+            if(this.ignoredResponseHeaders.indexOf(header) !== -1) return;
+            out += header + ': ' + this.responseHeaders[header] + '\r\n';
+        }, this);
+
+        return out;
     };
 
     GMockHttpRequest.prototype.makeXMLResponse = function(data){
+        var xmlDoc = null;
 
+        if( typeof DOMParser !== 'undefined'){
+            var parser = new DOMParser();
+            xmlDoc = parser.parseFromString(data, 'text/xml');
+        } else {
+            xmlDoc = new ActiveXObject('Microsoft.XMLDOM');
+            xmlDoc.async = false;
+            xmlDoc.loadXML(data);
+        }
+
+        return xmlDoc;
     };
 
-    GMockHttpRequest.prototype.receive = function(status, data){
+    GMockHttpRequest.prototype.fakeResponse = function(status, data){
+        if( this.readyState !== GMockHttpRequest.OPENED || ! this.sent){
+            throw new Error('Invalid state');
+        }
 
+        this.status = status;
+        this.statusText = status + ' ' + GMockHttpRequest.STATUS_CODES[status];
+
+        this.readyState = GMockHttpRequest.HEADERS_RECEIVED;
+
+        this.onprogress();
+        this.onreadystatechange();
+
+        this.responseText = data;
+        this.responseXML = this.makeXMLResponse(data);
+
+        this.readyState = GMockHttpRequest.LOADING;
+        this.onprogress();
+        this.onreadystatechange();
+
+        this.readyState = GMockHttpRequest.DONE;
+        this.onreadystatechange();
+        this.onprogress();
+        this.onload();
     };
 
-    GMockHttpRequest.prototype.err = function(exception){
+    GMockHttpRequest.prototype.fakeError = function(exception){
+        if( this.readyState !== GMockHttpRequest.OPENED || ! this.sent){
+            throw new Error('Invalid state');
+        }
 
+        this.responseText = null;
+        this.error = true;
+
+        _resetObject(this.requestHeaders);
+
+        this.readyState = GMockHttpRequest.DONE;
+
+        if(!this.async) throw exception;
+
+        this.onreadystatechange();
+        this.onerror();
     };
 
     GMockHttpRequest.prototype.authenticate = function(user, password){
