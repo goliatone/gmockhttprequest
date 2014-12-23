@@ -11,7 +11,7 @@ Download the [production version][min] or the [development version][max].
 [max]: https://raw.github.com/goliatone/gmockhttprequest/master/dist/gmockhttprequest.js
 
 ## Development
-`npm install && bower install`
+`npm install && bower install && grunt bower`
 
 If you need to `sudo` the `npm` command, you can try to:
 
