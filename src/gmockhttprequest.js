@@ -165,6 +165,8 @@
 
         if(config.autoinitialize) this.init(config);
 
+        if(typeof this.register === 'function') this.register(this);
+
     };
 
     GMockHttpRequest.name = GMockHttpRequest.prototype.name = 'GMockHttpRequest';
@@ -271,8 +273,6 @@
 
         console.log('GMockHttpRequest: Init!');
         _extend(this, config);
-
-        return 'This is just a stub!';
     };
 
     GMockHttpRequest.prototype.reset = function(){
@@ -455,8 +455,6 @@
         this.requestHeaders[header] = value;
     };
 
-
-
     GMockHttpRequest.prototype.getRequestHeader = function(header){
         return this.requestHeaders[(header || '').toLowerCase()];
     };
@@ -522,6 +520,7 @@
     GMockHttpRequest.prototype.abort = function(){
         this.responseText = null;
         this.error = true;
+        this.aborted = true;
 
         _resetObject(this.requestHeaders);
 
@@ -534,7 +533,8 @@
     };
 
     GMockHttpRequest.prototype.setResponseHeaders = function(headers){
-        Object.kesy(headers || {}).map(function(header){
+        console.log('HEADERS', headers)
+        Object.keys(headers || {}).map(function(header){
             this.setResponseHeader(header, headers[header]);
         }, this);
     };
@@ -659,6 +659,146 @@
     GMockHttpRequest.prototype.emit = function() {
         this.logger.warn(GMockHttpRequest, 'emit method is not implemented', arguments);
     };
+
+
+    var GMockHttpServer = function(handler){
+        this.handler = handler;
+        this.queue = [];
+        this.requests = [];
+        this.responses = [];
+        this.autoRespondTimeout = 10;
+
+        var location = window ? window.location : {};
+        this.currentLocationReg = new RegExp('^' + location.prototcol + '//' + location.host);
+    };
+
+    GMockHttpServer.prototype.start = function(){
+        var server = this;
+
+        function MockHttpRequest(){
+            console.log('PEPERONE')
+            this.register = function(request){
+                console.log('REGISTER', request);
+                server.addRequest(request);
+            };
+
+            GMockHttpRequest.apply(this, arguments);
+        };
+
+        MockHttpRequest.prototype = GMockHttpRequest.prototype;
+
+        window.SrcXMLHttpRequest = window.XMLHttpRequest;
+        window.XMLHttpRequest = MockHttpRequest;
+    };
+
+    GMockHttpServer.prototype.addRequest = function(request){
+        console.log('add request', request)
+        this.requests.push(request);
+        var server = this;
+
+        request.onsend = function(){
+            server.handleRequest(this);
+
+            if(!server.autoRespond || server.responding) return;
+
+            setTimeout(function(){
+                server.responding = false;
+                server.respond();
+            }, server.autoRespondTimeout);
+
+            server.responding = true;
+        };
+    };
+
+    GMockHttpServer.prototype.stop = function(){
+        window.XMLHttpRequest = window.SrcXMLHttpRequest;
+    };
+
+    GMockHttpServer.prototype.handleRequest = function(request){
+        this.queue || (this.queue = []);
+
+        if(request.async) this.queue.push(request);
+        else this.processRequest(request);
+    };
+
+    GMockHttpServer.prototype.respond = function(){
+        if (arguments.length > 0) this.respondWith.apply(this, arguments);
+
+        this.queue || (this.queue = []);
+
+        var requests = this.queue.splice(0, this.queue.length);
+        var xhr;
+
+        while(xhr = requests.shift()) this.processRequest(xhr);
+    };
+
+    GMockHttpServer.prototype.respondWith = function(method, url, body){
+        this.responses.push({
+            method: method,
+            url: url,
+            response: this.makeResponseObject(body)
+        });
+    };
+
+    GMockHttpServer.prototype.makeResponseObject = function(body){
+        if(typeof body === 'object') return body;
+        var response = {
+            code: 200,
+            headers: {},
+            body: body
+        };
+        return response;
+    };
+
+    GMockHttpServer.prototype.processRequest = function(request){
+        // try {
+            if(request.aborted) return;
+
+            var response = this.response || {code: 404, headers: {}, body: ''};
+
+            if(this.responses){
+                this.responses.map(function(resp){
+                    if(this.matchResponse(resp, request)){
+                        response = resp.response;
+                    }
+                }, this);
+            }
+
+            if(request.readyState !== GMockHttpRequest.DONE){
+                this.logger.log('ready state',response, request);
+                request.fakeResponse(response.code, response.headers, response.body);
+            }
+
+        // } catch(e){
+            // this.logger.error('GMockHttpServer error processing request', e);
+        // }
+    };
+
+    GMockHttpServer.prototype.matchResponse = function(response, request){
+        var requestUrl = request.url;
+
+        if(!this.currentLocationReg.test(requestUrl) || !/^https?:\/\//.test(requestUrl)){
+            requestUrl = requestUrl.replace(this.currentLocationReg, '');
+        }
+        var method = this.getHttpMethod(request);
+
+        return requestUrl === response.url && request.method === response.method;
+    };
+
+    GMockHttpServer.prototype.getHttpMethod = function(request){
+        //TODO: Move this to GMockHttpRequest
+        if(this.fakeHttpMethods &&(/^post$/i).test(request.method)){
+            //TODO: Make regexp configurable, we could have _m=PUT
+            var matches = (request.requestText || '').match(/_method=([^\b;]+)/);
+            return !!matches ? matches[1] : request.method;
+        }
+
+        return request.method;
+    };
+
+    GMockHttpServer.prototype.logger = _shimConsole(console);
+
+    GMockHttpRequest.Server = GMockHttpServer;
 
     return GMockHttpRequest;
 }));
