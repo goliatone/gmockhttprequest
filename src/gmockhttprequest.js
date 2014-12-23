@@ -96,6 +96,20 @@
         });
     }
 
+    /**
+     * Preserve references to original object,
+     * we delete each key instead of overwriting
+     * with new instance.
+     *
+     * @param  {Object} obj
+     * @return {void}
+     */
+    function _resetObject(obj){
+        Object.keys(obj).forEach(function(key){
+            delete obj[key];
+        });
+    }
+
 ///////////////////////////////////////////////////
 // CONSTRUCTOR
 ///////////////////////////////////////////////////
@@ -292,6 +306,7 @@
         this.sent = false;
         this.error = false;
         this.readyState = 0;
+        this.requestText = null;
         this.requestHeaders = {};
         this.responseHeaders = {};
     };
@@ -415,7 +430,19 @@
          * value obtained using nsIInputStream's available() method. Any headers included at the top of the stream are treated as part of the message body. The stream's MIMEtype should be specified by setting the Content-Type header using the setRequestHeader() method prior to calling send().
          * The best way to send binary content (like in files upload) is using an ArrayBufferView or Blobs in conjuncton with the send() method. However, if you want to send a stringifiable raw data, use the sendAsBinary() method instead, or the StringView Non native typed arrays superclass.
          */
+         if(this.readyState !== GMockHttpRequest.OPENED || this.sent){
+            throw new Error('Failed to execute \'send\' on \'XMLHttpRequest\': The object\'s state must be OPENED');
+         }
 
+         if((/GET|HEAD/i).test(this.method)) data = null;
+
+         this.sent = true;
+         this.error = false;
+         //TODO: We want to also trigger event.
+         this.onreadystatechange();
+
+         this.requestText = data;
+         this.onsend();
     };
 
     /**
@@ -424,7 +451,17 @@
      * @return {void}
      */
     GMockHttpRequest.prototype.abort = function(){
+        this.responseText = null;
+        this.error = true;
 
+        _resetObject(this.requestHeaders);
+
+        this.requestText = undefined;
+
+        this.readyState = GMockHttpRequest.UNSENT;
+        this.onreadystatechange();
+
+        this.onabort();
     };
 
     GMockHttpRequest.prototype.setResponseHeader = function(header, value){
