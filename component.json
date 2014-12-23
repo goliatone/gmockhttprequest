@@ -1,0 +1,30 @@
+{
+  "name": "gmockhttprequest",
+  "version": "0.0.0",
+  "description": "XMLHttpRequest mock utility",
+  "homepage": "https://github.com/goliatone/gmockhttprequest",
+	"repository": {
+		"type": "git",
+		"url": "git://github.com/goliatone/gmockhttprequest.git"
+	},
+	 "bugs": {
+		"url": "https://github.com/goliatone/gmockhttprequest/issues"
+	},
+	"author": {
+		"name": "goliatone",
+		"email": "hello@goliatone.com",
+		"url": "http://goliatone.com"
+	},
+	"licenses": [
+		{
+			"type": "MIT",
+			"url": "https://github.com/goliatone/gmockhttprequest/blob/master/LICENSE-MIT"
+		}
+	],
+  "dependencies": {
+    "jquery": "~1.9.1",
+    "requirejs": "~2.1.4"
+  },
+  "devDependencies": {
+  }
+}
