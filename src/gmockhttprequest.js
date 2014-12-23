@@ -408,7 +408,6 @@
         if(typeof url !== 'string') throw new Error('Invalid Url');
 
         this.url = url;
-        this.urlParts = this.parseUri(url);
 
         this.async = async === undefined ? true : async;
         this.user = user;
@@ -617,11 +616,6 @@
         this.onreadystatechange();
         this.onerror();
     };
-
-    GMockHttpRequest.prototype.authenticate = function(user, password){
-
-    };
-
 
 
 
