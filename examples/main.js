@@ -12,14 +12,53 @@ define(['gmockhttprequest', 'jquery'], function (GMockHttpRequest, $) {
     console.log('Loading');
     window.GMockHttpRequest = GMockHttpRequest;
 
+    // GMockHttpRequest.Server.record();
+/*
+    $.ajax({
+        url:'http://localhost:9000',
+        // type:'POST',
+        // data:'json'
+    })
+    .done(function(data){
+        console.log('DONE', data)
+    })
+    .fail(function(err){
+        console.log('ERROR', arguments);
+    })
+    .always(function(){
+        // console.log('RUNNNNN')
+    });
+*/
+    /*$.ajax({
+        url:'http://localhost:3232/console',
+        type:'POST',
+        data: { name: "John", location: "Boston" },
+        dataType:'json'
+    })
+    .done(function(data){
+        console.log('DONE', data)
+    })
+    .fail(function(err){
+        console.log('ERROR', arguments);
+    })
+    .always(function(){
+        // console.log('RUNNNNN')
+    });
+
+    return;*/
 	var Server = new GMockHttpRequest.Server(function(){
         console.log('server', arguments);
     });
     Server.start();
-    Server.respondWith('GET', 'http://localhost:9000', 'Kaka');
+    Server.respondWith('POST', 'http://localhost:9000', '{"status": true}');
 
     //=====================
-    $.ajax({url:'http://localhost:9000'})
+    $.ajax({
+        url:'http://localhost:9000',
+        type:'POST',
+        data: { name: "John", location: "Boston" },
+        dataType:'json'
+    })
     .done(function(data){
         console.log('DONE', data)
     })
