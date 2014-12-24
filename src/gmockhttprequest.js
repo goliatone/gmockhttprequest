@@ -166,8 +166,9 @@
         if(config.autoinitialize) this.init(config);
 
         if(typeof this.register === 'function') this.register(this);
-
     };
+
+
 
     GMockHttpRequest.name = GMockHttpRequest.prototype.name = 'GMockHttpRequest';
 
@@ -175,13 +176,13 @@
 
     /**
      * `readyState` value
-     * open()has not been called yet
+     * open() has not been called yet
      * @type {Number}
      */
     GMockHttpRequest.UNSENT = 0;
     /**
      * `readyState` value
-     * send()has not been called yet.
+     * send() has not been called yet.
      * @type {Number}
      */
     GMockHttpRequest.OPENED = 1;
@@ -505,6 +506,7 @@
 
          this.sent = true;
          this.error = false;
+
          //TODO: We want to also trigger event.
          this.onreadystatechange();
 
@@ -644,8 +646,6 @@
         this.onerror();
     };
 
-
-
     /**
      * Logger method, meant to be implemented by
      * mixin. As a placeholder, we use console if available
@@ -662,91 +662,144 @@
 //////////////////////////////////////////////
 /// Recorder
 //////////////////////////////////////////////
-    var GHttpRecord = function(){
-        this.xhr = new SrcXMLHttpRequest();
-        ['abort',
-        'getAllResponseHeaders',
-        'getResponseHeader',
-        // 'open',
-        'overrideMimeType'
-        ].forEach(function(method){
-            this[method] = function(){
-                this.xhr[method].apply(this.xhr, arguments);
+    var READONLY = ['responseText', 'responseXML', 'status', 'statusText'];
+    var GETTERS_SETTERS = ['readyState', 'response', 'responseType', 'statusText', 'timeout', 'upload', 'withCredentials', 'onload', 'onprogress', 'onerror', 'onabort', 'onreadystatechange', 'onsend', 'ontimeout'];
+    var PASSTHROUGH_METHODS = ['abort', 'getAllResponseHeaders', 'getResponseHeader', 'overrideMimeType'];
+
+    function _wrapXMLHttpRequest(wrapper, xhr){
+        PASSTHROUGH_METHODS.forEach(function(method){
+            wrapper[method] = function(){
+                xhr[method].apply(xhr, arguments);
             };
-        }, this);
+        }, wrapper);
 
-        ['readyState',
-        'response',
-        'responseType',
-        'statusText',
-        'timeout',
-        'upload',
-        'withCredentials'
-        ].map(function(prop){
-            Object.defineProperty(this, prop, {
-                get: function(){ return this.xhr[prop];},
+        GETTERS_SETTERS.map(function(prop){
+            Object.defineProperty(wrapper, prop, {
+                get: function(){ return xhr[prop];},
                 set: function(value) {
-                    this.xhr[prop] = value;
+                    xhr[prop] = value;
                 },
                 enumerable:true,
                 configurable:true
             });
-        }, this);
+        }, wrapper);
 
-
-        [
-        'responseText',
-        'responseXML',
-        'status',
-        'statusText'
-        ].map(function(prop){
-            Object.defineProperty(this, prop, {
-                get: function(){ return this.xhr[prop];},
-                enumerable:true,
-                configurable:true
+        READONLY.map(function(prop){
+            Object.defineProperty(wrapper, prop, {
+                get: function(){ return xhr[prop];},
+                enumerable: true,
+                configurable: true
             });
-        }, this);
+        }, wrapper);
+    }
 
-        ['onload',
-        'onprogress',
-        'onerror',
-        'onabort',
-        'onreadystatechange',
-        'onsend',
-        'ontimeout'].map(function(prop){
-            Object.defineProperty(this, prop, {
-                get: function(){ return this.xhr[prop];},
-                set: function(value) {
-                    this.xhr[prop] = value;
-                },
-                enumerable:true,
-                configurable:true
-            });
-        }, this);
+    function _headerObjectFromString(headers){
+        headers = (headers || '').split(';');
+        var out = {};
+        headers.map(function(header){
+            header = header.replace('\r\n', '');
+            header = header.split(':');
+            out[header[0]] = header[1];
+        });
+        return out;
+    }
 
-        this._requestHeaders = [];
+    function Snapshoot(){
+        this.data = {};
+        this.requestHeaders = [];
+
+        this.fixArguments = function(args){
+            return Array.prototype.slice.call(args);
+        };
+
+        this.setRequestHeader = function(args){
+            this.requestHeaders.push(this.fixArguments(args));
+        };
+
+        this.setOpen = function(args){
+            this.open = this.fixArguments(args);
+        };
+
+        this.setSend = function(args){
+            this.send = this.fixArguments(args);
+            this.timestamp = Date.now();
+        };
+
+        this.setLoad = function(e){
+            this.success = true;
+            var headers = e.target.getAllResponseHeaders();
+            this.response = {
+                    status: e.target.status,
+                    headers: _headerObjectFromString(headers),
+                    body: e.target.responseText
+            };
+
+            this.terminate();
+        };
+
+        this.setError = function(xhr, e){
+            this.error = e;
+            this.success = false;
+            this.terminate();
+        };
+
+        this.terminate = function(){
+            this.travelTime = Date.now() - this.timestamp;
+        };
+
+        this.frame = function(){
+            return {
+                url: this.open[1],
+                method: this.open[0],
+                data: this.send[0],
+                response: this.response,
+                success: this.success,
+                timestamp: this.timestamp,
+                travelTime: this.travelTime,
+            };
+        };
+    }
+
+
+    var GHttpRecord = function(){
+
+        this.snapshot = new Snapshoot();
+
+        this.xhr = new SrcXMLHttpRequest();
+
+        _wrapXMLHttpRequest(this, this.xhr);
 
         this.xhr.addEventListener('load', this.onLoad.bind(this), false);
+        this.xhr.addEventListener('error', this.onError.bind(this), false);
+
+        if(typeof this.register === 'function') this.register(this);
     };
+
     GHttpRecord.prototype.setRequestHeader = function(){
-        this._requestHeaders.push(Array.prototype.slice(arguments));
+        this.snapshot.setRequestHeader(arguments);
         this.xhr.setRequestHeader.apply(this.xhr, arguments);
     };
 
     GHttpRecord.prototype.open = function(method, url, async, user, password){
-        console.log(method, url, async, user, password);
-
-        console.log(this.xhr.getRequestHeader);
+        this.snapshot.setOpen(arguments);
         this.xhr.open.apply(this.xhr, arguments);
     };
 
     GHttpRecord.prototype.send = function(){
-        console.log('SEND', arguments);
+        this.snapshot.setSend(arguments);
         this.xhr.send.apply(this.xhr, arguments);
     };
 
-    GHttpRecord.prototype.onLoad = function(e){
+    GHttpRecord.prototype.onError = function(e){
+        this.snapshot.setError(this.xhr, e);
+    };
 
+    GHttpRecord.prototype.onLoad = function(e){
+        this.snapshot.setLoad(e);
+    };
+
+    GHttpRecord.prototype.value = function(){
+        return this.snapshot.frame();
     };
 
 //////////////////////////////////////////////
@@ -755,6 +808,7 @@
     var GMockHttpServer = function(handler){
         this.handler = handler;
         this.queue = [];
+        this.frames = [];
         this.requests = [];
         this.responses = [];
         this.autoRespondTimeout = 10;
@@ -769,22 +823,34 @@
         window.XMLHttpRequest = window.SrcXMLHttpRequest;
     };
 
-    GMockHttpServer.record = function(){
+    GMockHttpServer.prototype.record = function(){
         GMockHttpServer.restore();
+
+        var server = this;
+
+        function RecordedHttpRequest(){
+            this.register = function(request){
+                server.addSnapshot(request);
+            };
+
+            GHttpRecord.apply(this, arguments);
+        };
+
+        RecordedHttpRequest.prototype = GHttpRecord.prototype;
+
         window.SrcXMLHttpRequest = window.XMLHttpRequest;
-        window.XMLHttpRequest = GHttpRecord;
+        window.XMLHttpRequest = RecordedHttpRequest;
     };
 
     GMockHttpServer.prototype.start = function(){
         var server = this;
 
+        this.startTime = Date.now();
+
         function MockHttpRequest(){
-            console.log('PEPERONE')
             this.register = function(request){
-                console.log('REGISTER', request);
                 server.addRequest(request);
             };
-
             GMockHttpRequest.apply(this, arguments);
         };
 
@@ -792,6 +858,10 @@
 
         window.SrcXMLHttpRequest = window.XMLHttpRequest;
         window.XMLHttpRequest = MockHttpRequest;
+    };
+
+    GMockHttpServer.prototype.addSnapshot = function(snapshot){
+        this.frames.push(snapshot);
     };
 
     GMockHttpServer.prototype.addRequest = function(request){
@@ -815,6 +885,7 @@
 
     GMockHttpServer.prototype.stop = function(){
         GMockHttpServer.restore();
+        this.stopTime = Date.now();
     };
 
     GMockHttpServer.prototype.handleRequest = function(request){
@@ -830,26 +901,34 @@
         this.queue || (this.queue = []);
 
         var requests = this.queue.splice(0, this.queue.length);
-        var xhr;
 
+        var xhr;
         while(xhr = requests.shift()) this.processRequest(xhr);
     };
 
+    //TODO: This should take an object matching a snapshot!!
     GMockHttpServer.prototype.respondWith = function(method, url, body){
-        this.responses.push({
-            method: method,
+
+        var response = {
             url: url,
+            method: method,
             response: this.makeResponseObject(body)
-        });
+        };
+
+        if(typeof method === 'object') response = method;
+
+        this.responses.push(response);
     };
 
     GMockHttpServer.prototype.makeResponseObject = function(body){
         if(typeof body === 'object') return body;
+
         var response = {
-            code: 200,
+            status: 200,
             headers: {},
             body: body
         };
+
         return response;
     };
 
@@ -857,7 +936,7 @@
         try {
             if(request.aborted) return;
 
-            var response = this.response || {code: 404, headers: {}, body: ''};
+            var response = this.response || {status: 404, headers: {}, body: ''};
 
             if(this.responses){
                 this.responses.map(function(resp){
@@ -869,7 +948,7 @@
 
             if(request.readyState !== GMockHttpRequest.DONE){
                 this.logger.log('ready state',response, request);
-                request.fakeResponse(response.code, response.headers, response.body);
+                request.fakeResponse(response.status, response.headers, response.body);
             }
 
         } catch(e){
@@ -877,12 +956,14 @@
         }
     };
 
+    //TODO: We want to also match by data sent!!
     GMockHttpServer.prototype.matchResponse = function(response, request){
         var requestUrl = request.url;
 
         if(!this.currentLocationReg.test(requestUrl) || !/^https?:\/\//.test(requestUrl)){
             requestUrl = requestUrl.replace(this.currentLocationReg, '');
         }
+
         var method = this.getHttpMethod(request);
 
         return requestUrl === response.url && request.method === response.method;
