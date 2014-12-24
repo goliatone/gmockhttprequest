@@ -11,8 +11,12 @@ requirejs.config({
 define(['gmockhttprequest', 'jquery'], function (GMockHttpRequest, $) {
     console.log('Loading');
     window.GMockHttpRequest = GMockHttpRequest;
+/*
+    var Server = new GMockHttpRequest.Server();
+    Server.record();
+    window.server = Server;
+*/
 
-    // GMockHttpRequest.Server.record();
 /*
     $.ajax({
         url:'http://localhost:9000',
@@ -28,8 +32,27 @@ define(['gmockhttprequest', 'jquery'], function (GMockHttpRequest, $) {
     .always(function(){
         // console.log('RUNNNNN')
     });
+    return
 */
-    /*$.ajax({
+/*
+$.ajax({
+        url:'http://duckduckgo.com',
+        // type:'POST',
+        // data:'json'
+    })
+    .done(function(data){
+        console.log('DONE', data)
+    })
+    .fail(function(err){
+        console.error('==>ERROR', arguments);
+    })
+    .always(function(){
+        // console.log('RUNNNNN')
+    });
+    return
+*/
+/*
+    $.ajax({
         url:'http://localhost:3232/console',
         type:'POST',
         data: { name: "John", location: "Boston" },
@@ -45,16 +68,66 @@ define(['gmockhttprequest', 'jquery'], function (GMockHttpRequest, $) {
         // console.log('RUNNNNN')
     });
 
-    return;*/
+    $.ajax({
+        url:'http://localhost:3232/console',
+        type:'POST',
+        data: { name: "Peperone", location: "Barcelona" },
+        dataType:'json'
+    })
+    .done(function(data){
+        console.log('DONE', data)
+    })
+    .fail(function(err){
+        console.log('ERROR', arguments);
+    })
+    .always(function(){
+        // console.log('RUNNNNN')
+    });
+
+    $.ajax({
+        url:'http://localhost:3232/console',
+        type:'POST',
+        data: { name: "Kiko", location: "Ibiza" },
+        dataType:'json'
+    })
+    .done(function(data){
+        console.log('DONE', data)
+    })
+    .fail(function(err){
+        console.log('ERROR', arguments);
+    })
+    .always(function(){
+        // console.log('RUNNNNN')
+    });
+
+    return;
+*/
+
 	var Server = new GMockHttpRequest.Server(function(){
         console.log('server', arguments);
     });
+    // Server.record()
     Server.start();
-    Server.respondWith('POST', 'http://localhost:9000', '{"status": true}');
+
+    Server.respondWith({
+        "url": "http://localhost:3232/console",
+        "method": "POST",
+        "data": "name=John&location=Boston",
+        "response": {
+            "status": 200,
+            "headers": {
+                "Content-Type": " application/json"
+            },
+            "body": "{\"status\":true, \"mesasge\":\"This is a mesasge\"}"
+        },
+        "success": true,
+        "timestamp": 1419396584251,
+        "travelTime": 6
+    });
 
     //=====================
     $.ajax({
-        url:'http://localhost:9000',
+        url:'http://localhost:3232/console',
         type:'POST',
         data: { name: "John", location: "Boston" },
         dataType:'json'
@@ -72,5 +145,5 @@ define(['gmockhttprequest', 'jquery'], function (GMockHttpRequest, $) {
 
     Server.respond();
 
-    window.Server = Server;
+    window.server = Server;
 });
