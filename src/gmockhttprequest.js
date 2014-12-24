@@ -659,8 +659,99 @@
     GMockHttpRequest.prototype.emit = function() {
         this.logger.warn(GMockHttpRequest, 'emit method is not implemented', arguments);
     };
+//////////////////////////////////////////////
+/// Recorder
+//////////////////////////////////////////////
+    var GHttpRecord = function(){
+        this.xhr = new SrcXMLHttpRequest();
+        ['abort',
+        'getAllResponseHeaders',
+        'getResponseHeader',
+        // 'open',
+        'overrideMimeType'
+        ].forEach(function(method){
+            this[method] = function(){
+                this.xhr[method].apply(this.xhr, arguments);
+            };
+        }, this);
+
+        ['readyState',
+        'response',
+        'responseType',
+        'statusText',
+        'timeout',
+        'upload',
+        'withCredentials'
+        ].map(function(prop){
+            Object.defineProperty(this, prop, {
+                get: function(){ return this.xhr[prop];},
+                set: function(value) {
+                    this.xhr[prop] = value;
+                },
+                enumerable:true,
+                configurable:true
+            });
+        }, this);
 
 
+        [
+        'responseText',
+        'responseXML',
+        'status',
+        'statusText'
+        ].map(function(prop){
+            Object.defineProperty(this, prop, {
+                get: function(){ return this.xhr[prop];},
+                enumerable:true,
+                configurable:true
+            });
+        }, this);
+
+        ['onload',
+        'onprogress',
+        'onerror',
+        'onabort',
+        'onreadystatechange',
+        'onsend',
+        'ontimeout'].map(function(prop){
+            Object.defineProperty(this, prop, {
+                get: function(){ return this.xhr[prop];},
+                set: function(value) {
+                    this.xhr[prop] = value;
+                },
+                enumerable:true,
+                configurable:true
+            });
+        }, this);
+
+        this._requestHeaders = [];
+
+        this.xhr.addEventListener('load', this.onLoad.bind(this), false);
+    };
+    GHttpRecord.prototype.setRequestHeader = function(){
+        this._requestHeaders.push(Array.prototype.slice(arguments));
+        this.xhr.setRequestHeader.apply(this.xhr, arguments);
+    };
+
+    GHttpRecord.prototype.open = function(method, url, async, user, password){
+        console.log(method, url, async, user, password);
+
+        console.log(this.xhr.getRequestHeader);
+        this.xhr.open.apply(this.xhr, arguments);
+    };
+
+    GHttpRecord.prototype.send = function(){
+        console.log('SEND', arguments);
+        this.xhr.send.apply(this.xhr, arguments);
+    };
+
+    GHttpRecord.prototype.onLoad = function(e){
+
+    };
+
+//////////////////////////////////////////////
+/// Server
+//////////////////////////////////////////////
     var GMockHttpServer = function(handler){
         this.handler = handler;
         this.queue = [];
@@ -670,6 +761,18 @@
 
         var location = window ? window.location : {};
         this.currentLocationReg = new RegExp('^' + location.prototcol + '//' + location.host);
+    };
+
+
+    GMockHttpServer.restore = function(){
+        if(! window.SrcXMLHttpRequest) return;
+        window.XMLHttpRequest = window.SrcXMLHttpRequest;
+    };
+
+    GMockHttpServer.record = function(){
+        GMockHttpServer.restore();
+        window.SrcXMLHttpRequest = window.XMLHttpRequest;
+        window.XMLHttpRequest = GHttpRecord;
     };
 
     GMockHttpServer.prototype.start = function(){
@@ -711,7 +814,7 @@
     };
 
     GMockHttpServer.prototype.stop = function(){
-        window.XMLHttpRequest = window.SrcXMLHttpRequest;
+        GMockHttpServer.restore();
     };
 
     GMockHttpServer.prototype.handleRequest = function(request){
@@ -751,7 +854,7 @@
     };
 
     GMockHttpServer.prototype.processRequest = function(request){
-        // try {
+        try {
             if(request.aborted) return;
 
             var response = this.response || {code: 404, headers: {}, body: ''};
@@ -769,9 +872,9 @@
                 request.fakeResponse(response.code, response.headers, response.body);
             }
 
-        // } catch(e){
-            // this.logger.error('GMockHttpServer error processing request', e);
-        // }
+        } catch(e){
+            this.logger.error('GMockHttpServer error processing request', e);
+        }
     };
 
     GMockHttpServer.prototype.matchResponse = function(response, request){
@@ -798,6 +901,7 @@
 
     GMockHttpServer.prototype.logger = _shimConsole(console);
 
+    GMockHttpRequest.Record = GHttpRecord;
     GMockHttpRequest.Server = GMockHttpServer;
 
     return GMockHttpRequest;
