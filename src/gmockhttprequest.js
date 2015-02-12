@@ -803,10 +803,68 @@
     };
 
 //////////////////////////////////////////////
+/// Request Gateway:
+/// When we open a request the URL parameter is
+/// matched against a list of pass through items,
+/// if matched it will behave as a GHttpRecord
+/// request with a rewritten URL to hit our
+/// mock server. If it's not matched
+//////////////////////////////////////////////
+    var GHttpGatewayRequest = function(options){
+
+        if(typeof this.register === 'function') this.register(this);
+    };
+
+    GHttpGatewayRequest.prototype.open = function(method, url, async, user, password){
+        var args = this.matchRequest(Array.prototype.slice.call(arguments));
+        this.snapshot.setOpen(args);
+        this.xhr.open.apply(this.xhr, args);
+    };
+
+    GHttpGatewayRequest.prototype.matchRequest = function(args){
+        if(!this.matchUrl(args[1])) return args;
+        return this.filterByUrl(args);
+    };
+
+    GHttpGatewayRequest.pathToRegExp = function (path, keys, options) {
+        keys || (keys = []),
+        options || (options = {});
+        path = path
+            .concat('/?')
+            .replace(/\/\(/g, '(?:/')
+            .replace(/(\/)?(\.)?:(\w+)(?:(\(.*?\)))?(\?)?|\*/g, function(_, slash, format, key, capture, optional){
+                if (_ === "*"){
+                    keys.push(undefined);
+                    return _;
+                }
+
+                keys.push({name:key});
+                slash = slash || '';
+                return ''
+                    + (optional ? '' : slash)
+                    + '(?:'
+                    + (optional ? slash : '')
+                    + (format || '') + (capture || '([^/]+?)') + ')'
+                    + (optional || '');
+            })
+            .replace(/([\/.])/g, '\\$1')
+            .replace(/\*/g, '(.*)');
+
+        var regexp = new RegExp('^' + path + '$', 'i');
+
+        regexp.keys = keys;
+        regexp.options = options;
+
+        return regexp;
+    };
+
+
+//////////////////////////////////////////////
 /// Server
 //////////////////////////////////////////////
     var GMockHttpServer = function(handler){
         this.handler = handler;
+        this.methodKeyword = '_method';
         this.queue = [];
         this.frames = [];
         this.requests = [];
@@ -816,7 +874,6 @@
         var location = window ? window.location : {};
         this.currentLocationReg = new RegExp('^' + location.prototcol + '//' + location.host);
     };
-
 
     GMockHttpServer.restore = function(){
         if(! window.SrcXMLHttpRequest) return;
@@ -940,9 +997,7 @@
 
             if(this.responses){
                 this.responses.map(function(resp){
-                    if(this.matchResponse(resp, request)){
-                        response = resp.response;
-                    }
+                    if(this.matchResponse(resp, request)) response = resp.response;
                 }, this);
             }
 
@@ -971,9 +1026,10 @@
 
     GMockHttpServer.prototype.getHttpMethod = function(request){
         //TODO: Move this to GMockHttpRequest
-        if(this.fakeHttpMethods &&(/^post$/i).test(request.method)){
+        if(this.fakeHttpMethods && (/^post$/i).test(request.method)){
             //TODO: Make regexp configurable, we could have _m=PUT
-            var matches = (request.requestText || '').match(/_method=([^\b;]+)/);
+            var methodReg = new RegExp( this.methodKeyword + '=([^\\b;]+)');
+            var matches = (request.requestText || '').match(methodReg);
             return !!matches ? matches[1] : request.method;
         }
 
@@ -984,6 +1040,7 @@
 
     GMockHttpRequest.Record = GHttpRecord;
     GMockHttpRequest.Server = GMockHttpServer;
+    GMockHttpRequest.XMLHttpRequest = window.XMLHttpRequest;
 
     return GMockHttpRequest;
 }));
