@@ -4,13 +4,17 @@ requirejs.config({
     paths: {
         'jquery': 'jquery/jquery',
         'extend': 'gextend/extend',
-        'gmockhttprequest': 'gmockhttprequest'
+        'mockedhttprequest': 'mockedhttprequest',
+        'gatewayhttprequest': 'gatewayhttprequest',
+        'recordedhttprequest': 'recordedhttprequest',
+        'mockhttpserver': 'mockhttpserver'
+        // 'gmockhttprequest': 'gmockhttprequest'
     }
 });
 
-define(['gmockhttprequest', 'jquery'], function (GMockHttpRequest, $) {
+define(['mockhttpserver', 'jquery'], function (MockHttpServer, $) {
     console.log('Loading');
-    window.GMockHttpRequest = GMockHttpRequest;
+    // window.GMockHttpRequest = GMockHttpRequest;
 /*
     var Server = new GMockHttpRequest.Server();
     Server.record();
@@ -103,7 +107,7 @@ $.ajax({
     return;
 */
 
-	var Server = new GMockHttpRequest.Server(function(){
+	var Server = new MockHttpServer(function(){
         console.log('server', arguments);
     });
     // Server.record()
